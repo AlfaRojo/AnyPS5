@@ -14,13 +14,21 @@ bool nameCharacter(unsigned char value) {
     return std::isalnum(value) != 0 || value == '_';
 }
 
+std::string asciiLower(std::string text) {
+    for (auto& character : text)
+        if (character >= 'A' && character <= 'Z') character = static_cast<char>(character - 'A' + 'a');
+    return text;
+}
+
 std::string replaceNames(std::string text, const std::vector<std::string>& names) {
     for (const auto& name : names) {
         if (name.empty()) continue;
+        const auto haystack = asciiLower(text);
+        const auto needle = asciiLower(name);
         std::string result;
         std::size_t cursor = 0;
         for (;;) {
-            const auto found = text.find(name, cursor);
+            const auto found = haystack.find(needle, cursor);
             if (found == std::string::npos) break;
             const auto end = found + name.size();
             const bool before = found == 0 || !nameCharacter(static_cast<unsigned char>(text[found - 1]));
@@ -194,7 +202,8 @@ std::vector<std::pair<std::string, std::string>> FilterHostEnvironment(const std
 std::vector<std::string> HostRedactionNames(const std::string& user, const std::string& hostName, const std::string& homeDirectory) {
     std::vector<std::string> names;
     const auto add = [&](const std::string& name) {
-        if (!name.empty() && std::find(names.begin(), names.end(), name) == names.end()) names.push_back(name);
+        const auto same = [&](const std::string& known) { return asciiLower(known) == asciiLower(name); };
+        if (!name.empty() && std::find_if(names.begin(), names.end(), same) == names.end()) names.push_back(name);
     };
     add(user);
     add(hostName);

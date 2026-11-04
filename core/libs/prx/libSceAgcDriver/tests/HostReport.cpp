@@ -216,6 +216,7 @@ void RedactionNamesAreDerived() {
     Check(AgcDriver::HostRedactionNames("alice", "box", "/home/ally") == std::vector<std::string>{"alice", "box", "ally"}, "a home name that differs from the user was dropped");
     Check(AgcDriver::HostRedactionNames("", "", "/home/ally/") == std::vector<std::string>{"ally"}, "a trailing separator hid the home directory name");
     Check(AgcDriver::HostRedactionNames("", "", "C:\\Users\\Bob") == std::vector<std::string>{"Bob"}, "a Windows home directory was not split");
+    Check(AgcDriver::HostRedactionNames("Bob", "BOB-PC", "C:\\Users\\bob") == std::vector<std::string>{"Bob", "BOB-PC"}, "a home name that differs from the user only in case was kept");
     Check(AgcDriver::HostRedactionNames("", "", "").empty(), "empty inputs produced names");
 }
 
@@ -248,15 +249,24 @@ void NamedValuesAreRedacted() {
     Check(AgcDriver::RedactHostText("alicia palice", names) == "alicia palice", "a name inside another word was replaced");
     Check(AgcDriver::RedactHostText("alice-pc", names) == "<redacted>-pc", "a name before a dash was kept");
     Check(AgcDriver::RedactHostText("no names here", {}) == "no names here", "text without names changed");
+    Check(AgcDriver::RedactHostText("USER Alice on Workstation-7", names) == "USER <redacted> on <redacted>", "a listed name in another case was kept");
+    Check(AgcDriver::RedactHostText("ALICE-PC", names) == "<redacted>-PC", "an upper-case name before a dash was kept");
+    Check(AgcDriver::RedactHostText("AL", names) == "<redacted>", "a short upper-case name was kept");
+    Check(AgcDriver::RedactHostText("ALICIA PALICE", names) == "ALICIA PALICE", "an upper-case name inside another word was replaced");
+    Check(AgcDriver::RedactHostText("Users/ALICE/cache", names) == "Users/<redacted>/cache", "an upper-case name in a relative path was kept");
+    Check(AgcDriver::RedactHostText("user alice", {"ALICE"}) == "user <redacted>", "an upper-case listed name missed the lower-case text");
     auto facts = SampleFacts();
     facts.redactions = {"alice", "workstation-7"};
-    facts.os = "Linux workstation-7 6.1";
-    facts.gpu->name = "GPU of alice";
+    facts.os = "Linux WORKSTATION-7 6.1";
+    facts.gpu->name = "GPU of Alice";
     facts.environment.push_back({"APS5_NOTE", "alice"});
+    facts.environment.push_back({"APS5_PROBE", "Users/ALICE/cache"});
     const auto text = AgcDriver::FormatHostReport(facts);
-    Check(text.find("alice") == std::string::npos && text.find("workstation-7") == std::string::npos, "a listed name reached the report");
+    for (const char* leaked : {"alice", "Alice", "ALICE", "workstation-7", "WORKSTATION-7"})
+        Check(text.find(leaked) == std::string::npos, "a listed name reached the report");
     Check(text.find("os: Linux <redacted> 6.1\n") != std::string::npos, "the host name was not replaced in the OS line");
     Check(text.find("device: GPU of <redacted>\n") != std::string::npos, "the user name was not replaced in the GPU name");
+    Check(text.find("APS5_PROBE: Users/<redacted>/cache\n") != std::string::npos, "the user name was not replaced in an environment value");
 }
 
 void FormattedReportHasNoSensitiveText() {
