@@ -217,6 +217,17 @@ static int TrailingSlashCreationError(const std::filesystem::path& native, int f
     return status.type() == std::filesystem::file_type::not_found ? 2 : 0;
 }
 
+#ifdef _WIN32
+static int TrailingSeparatorError(const std::filesystem::path& native) {
+    if (native.has_filename() || !native.has_relative_path()) return 0;
+    std::error_code error;
+    const auto status = std::filesystem::status(native, error);
+    if (status.type() == std::filesystem::file_type::not_found) return ENOENT;
+    if (error) return 0;
+    return std::filesystem::is_directory(status) ? 0 : ENOTDIR;
+}
+#endif
+
 static int OpenNative(const std::filesystem::path& native, int flags, std::uint16_t mode) {
     if (AppArchiveHasDirectory_nid_no_patch(native)) {
         std::error_code error;
@@ -240,6 +251,7 @@ static int OpenNative(const std::filesystem::path& native, int flags, std::uint1
     std::error_code pathError;
     const auto metadataOpenPath = NativeMetadataPath(native, pathError);
     const auto& openNative = pathError ? native : metadataOpenPath;
+    if (const int error = TrailingSeparatorError(native)) return SceErrorFromErrno(error);
     if ((flags & (SCE_KERNEL_O_DIRECTORY | SCE_KERNEL_O_CREAT)) == SCE_KERNEL_O_DIRECTORY) {
         std::error_code error;
         const auto status = std::filesystem::status(openNative, error);
